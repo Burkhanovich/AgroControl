@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Ob-havo - AgroControl{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <header class="glass shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <div class="slide-in">
+                <h1 class="text-2xl font-bold gradient-text">AgroControl</h1>
+                <p class="text-sm text-gray-600">Ob-havo ma'lumotlari</p>
+            </div>
+            <div class="flex items-center space-x-4 slide-in">
+                <a href="/dashboard" class="text-sm text-gray-600 hover:text-green-600">Dashboard</a>
+                <span id="user-name" class="text-sm font-medium text-gray-700"></span>
+                <button onclick="logout()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white btn text-sm">
+                    Chiqish
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Loading -->
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+            <p class="mt-4 text-gray-600">Ob-havo ma'lumotlari yuklanmoqda...</p>
+        </div>
+
+        <!-- Error -->
+        <div id="error" class="hidden">
+            <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                <p class="text-red-700" id="error-message"></p>
+                <button onclick="loadWeather()" class="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md">
+                    Qayta urinish
+                </button>
+            </div>
+        </div>
+
+        <!-- Weather Content -->
+        <div id="weather-content" class="hidden">
+            <!-- Current Weather -->
+            <div class="weather-gradient card fade-in p-8 text-white mb-8">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-3xl font-bold mb-2" id="location">Toshkent</h2>
+                        <p class="text-xl mb-4" id="current-description">Ochiq osmon</p>
+                        <div class="flex items-center space-x-8">
+                            <div>
+                                <p class="text-sm opacity-80">Harorat</p>
+                                <p class="text-5xl font-bold" id="current-temp">25°</p>
+                            </div>
+                            <div>
+                                <p class="text-sm opacity-80">His qilinadi</p>
+                                <p class="text-2xl" id="current-feels">23°</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <img id="current-icon" src="" alt="Weather" class="w-32 h-32">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-blue-400">
+                    <div>
+                        <p class="text-sm opacity-80">Namlik</p>
+                        <p class="text-xl font-semibold" id="current-humidity">60%</p>
+                    </div>
+                    <div>
+                        <p class="text-sm opacity-80">Shamol</p>
+                        <p class="text-xl font-semibold" id="current-wind">5 m/s</p>
+                    </div>
+                    <div>
+                        <p class="text-sm opacity-80">Bosim</p>
+                        <p class="text-xl font-semibold" id="current-pressure">1013 hPa</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7 Day Forecast -->
+            <div class="card slide-up p-6">
+                <h3 class="text-2xl font-bold gradient-text mb-6">7 kunlik prognoz</h3>
+                <div id="forecast-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+                    <!-- Forecast cards will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// User ma'lumotlarini ko'rsatish
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+if (user.full_name) {
+    document.getElementById('user-name').textContent = user.full_name;
+}
+
+// Logout funksiyasi
+function logout() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+}
+
+// Ob-havo ma'lumotlarini yuklash
+async function loadWeather() {
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const content = document.getElementById('weather-content');
+
+    loading.classList.remove('hidden');
+    error.classList.add('hidden');
+    content.classList.add('hidden');
+
+    try {
+        // Joylashuvni olish
+        let lat = 41.2995;  // Default: Toshkent
+        let lon = 69.2401;
+
+        if (navigator.geolocation) {
+            try {
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        timeout: 5000,
+                        enableHighAccuracy: true
+                    });
+                });
+                lat = position.coords.latitude;
+                lon = position.coords.longitude;
+                console.log('Joylashuv olindi:', lat, lon);
+            } catch (geoError) {
+                console.log('Joylashuv olishda xatolik, default ishlatiladi:', geoError.message);
+            }
+        }
+
+        const response = await API.get(`/api/weather?lat=${lat}&lon=${lon}`);
+        const data = await response.json();
+
+        if (response.ok) {
+            displayWeather(data);
+            loading.classList.add('hidden');
+            content.classList.remove('hidden');
+        } else {
+            throw new Error(data.detail || 'Xatolik yuz berdi');
+        }
+    } catch (err) {
+        loading.classList.add('hidden');
+        error.classList.remove('hidden');
+        document.getElementById('error-message').textContent = err.message;
+    }
+}
+
+// Ob-havo ma'lumotlarini ko'rsatish
+function displayWeather(data) {
+    // Current weather
+    if (data.current) {
+        document.getElementById('location').textContent = data.location || 'Toshkent';
+        document.getElementById('current-description').textContent = data.current.description;
+        document.getElementById('current-temp').textContent = data.current.temp + '°';
+        document.getElementById('current-feels').textContent = data.current.feels_like + '°';
+        document.getElementById('current-humidity').textContent = data.current.humidity + '%';
+        document.getElementById('current-wind').textContent = data.current.wind_speed + ' m/s';
+        document.getElementById('current-pressure').textContent = data.current.pressure + ' hPa';
+        document.getElementById('current-icon').src = `https://openweathermap.org/img/wn/${data.current.icon}@4x.png`;
+    }
+
+    // Forecast
+    const forecastContainer = document.getElementById('forecast-container');
+    forecastContainer.innerHTML = '';
+
+    data.forecast.forEach((day, index) => {
+        const card = document.createElement('div');
+        card.className = 'card card-hover p-4 text-center';
+        card.style.animationDelay = `${index * 0.1}s`;
+        card.innerHTML = `
+            <p class="font-semibold text-gray-900 mb-1">${day.day_name}</p>
+            <p class="text-sm text-gray-600 mb-3">${formatDate(day.date)}</p>
+            <img src="https://openweathermap.org/img/wn/${day.icon}@2x.png" alt="${day.description}" class="w-16 h-16 mx-auto mb-2">
+            <p class="text-sm text-gray-700 mb-3">${day.description}</p>
+            <div class="flex justify-center items-center space-x-2 mb-2">
+                <span class="text-xl font-bold text-red-600">${day.temp_max}°</span>
+                <span class="text-gray-400">/</span>
+                <span class="text-lg text-blue-600">${day.temp_min}°</span>
+            </div>
+            <div class="text-xs text-gray-600 space-y-1">
+                <p>💧 ${day.humidity}%</p>
+                <p>💨 ${day.wind_speed} m/s</p>
+                <p>☔ ${day.pop}%</p>
+            </div>
+        `;
+        forecastContainer.appendChild(card);
+    });
+}
+
+// Sanani formatlash
+function formatDate(dateStr) {
+    const date = new Date(dateStr);
+    const day = date.getDate();
+    const months = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyun', 'Iyul', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+    return `${day} ${months[date.getMonth()]}`;
+}
+
+// Sahifa yuklanganda
+document.addEventListener('DOMContentLoaded', () => {
+    loadWeather();
+});
+</script>
+{% endblock %}
